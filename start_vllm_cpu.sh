@@ -4,7 +4,7 @@ set -euo pipefail
 VENV_PATH=".venv/bin/activate"
 TCMALLOC_LIB="/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4"
 IOMP_LIB=".venv/lib/libiomp5.so"
-MODEL_NAME="Qwen/Qwen2.5-1.5B-Instruct"
+MODEL_NAME="Qwen/Qwen3-1.7B"
 SERVED_MODEL_NAME="qwen-local"
 PORT="8000"
 MAX_MODEL_LEN="8192"
@@ -89,6 +89,7 @@ CMD=(
     "${MODEL_NAME}"
     --dtype bfloat16
     --max-model-len "${MAX_MODEL_LEN}"
+    --default-chat-template-kwargs '{"enable_thinking": false}'
     --served-model-name "${SERVED_MODEL_NAME}"
     --port "${PORT}"
 )

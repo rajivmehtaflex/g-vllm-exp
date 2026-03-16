@@ -11,6 +11,7 @@ client = openai.OpenAI(
 )
 
 EXIT_COMMANDS = {"quit", "exit"}
+CHAT_TEMPLATE_KWARGS = {"enable_thinking": False}
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,6 +95,7 @@ def test_chat_completion(prompt: str, max_tokens: int, system_prompt: str) -> No
             max_tokens=max_tokens,
             stream=True,
             stream_options={"include_usage": True},
+            extra_body={"chat_template_kwargs": CHAT_TEMPLATE_KWARGS},
         )
 
         for chunk in stream:

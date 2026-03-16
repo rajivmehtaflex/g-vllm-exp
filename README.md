@@ -16,6 +16,7 @@ This script launches the vLLM server with CPU-safe defaults for the current host
 ```bash
 ./start_vllm_cpu.sh
 ```
+For Qwen3, the launcher also disables reasoning-mode output by default with `--default-chat-template-kwargs '{"enable_thinking": false}'`, so normal chat responses do not emit `<think>` blocks.
 
 ### 3. Run Test Script
 Verify the API is working using the OpenAI SDK.
@@ -37,7 +38,7 @@ The table below records the actual problems encountered during setup and launch,
 | `vllm serve` rejects `--device cpu` | Startup fails with `vllm: error: unrecognized arguments: --device cpu` | Removed `--device cpu` from the serve command and relied on `VLLM_TARGET_DEVICE=cpu` instead |
 | `libiomp` missing from `LD_PRELOAD` | Engine startup fails with `RuntimeError: libiomp is not found in LD_PRELOAD` | Updated the launcher to preload `.venv/lib/libiomp5.so` and made `setup.sh` generate the same logic |
 | TCMalloc-only preload was incomplete | CPU startup reached vLLM but failed before model initialization | Launcher now constructs `LD_PRELOAD` from both Intel OpenMP and TCMalloc, keeping TCMalloc optional but `libiomp5.so` required |
-| EPYC-only launcher defaults did not fit the current host | Old script assumed `Qwen2.5-7B-Instruct`, fixed NUMA pinning, and a large KV cache | Rewrote `start_vllm_cpu.sh` for the current VM: `Qwen2.5-1.5B-Instruct`, `OMP_NUM_THREADS=2`, `VLLM_CPU_KVCACHE_SPACE=4`, optional `numactl` |
+| EPYC-only launcher defaults did not fit the current host | Old script assumed `Qwen2.5-7B-Instruct`, fixed NUMA pinning, and a large KV cache | Rewrote `start_vllm_cpu.sh` for the current VM: `Qwen3-1.7B`, `OMP_NUM_THREADS=2`, `VLLM_CPU_KVCACHE_SPACE=4`, optional `numactl` |
 | NUMA tooling may be absent or unnecessary | Launch script would fail or over-assume topology on single-node systems | Launcher now checks for `numactl` and only uses it when installed and when more than one NUMA node is present |
 
 ## 📈 Optimizations Applied
@@ -45,4 +46,5 @@ The table below records the actual problems encountered during setup and launch,
 - **TCMalloc preload:** Used when available for better allocator behavior under load.
 - **CPU backend selection:** Enforced with `VLLM_TARGET_DEVICE=cpu`.
 - **Adaptive NUMA behavior:** NUMA binding is only used when the machine topology justifies it.
-- **VM-safe defaults:** Current launcher settings are sized for a smaller remote VM rather than a large bare-metal EPYC server.
+- **VM-safe defaults:** Current launcher settings are sized for a smaller remote VM rather than a large bare-metal EPYC server, with `Qwen/Qwen3-1.7B` as the default model and `Qwen/Qwen3-0.6B` as the fallback if memory or latency is too tight.
+- **Reasoning disabled by default:** Qwen3 is launched with `enable_thinking=false`, and the local test client sends the same request-level override to keep responses concise.
