@@ -1,6 +1,6 @@
-# vLLM CPU Experiment (AMD EPYC Zen 4)
+# vLLM CPU Experiment
 
-This project contains a high-performance setup for running **vLLM** on CPU, specifically optimized for **AMD EPYC 9654 (Genoa)** processors on Ubuntu 24.04.
+This project contains a CPU-only **vLLM** setup for Ubuntu 24.04. It started as an EPYC-oriented configuration, but the current scripts and notes now reflect the issues encountered while bringing it up on a smaller remote VM and the fixes required to make the server start successfully.
 
 ## 🚀 Quick Start
 
@@ -12,7 +12,7 @@ chmod +x setup.sh
 ```
 
 ### 2. Start the Inference Server
-This script clears port 8000 and launches the vLLM server with NUMA and TCMalloc optimizations.
+This script launches the vLLM server with CPU-safe defaults for the current host. It preloads Intel OpenMP and TCMalloc when available, selects the CPU backend, and only uses `numactl` when the machine actually exposes multiple NUMA nodes.
 ```bash
 ./start_vllm_cpu.sh
 ```
@@ -23,40 +23,26 @@ Verify the API is working using the OpenAI SDK.
 uv run test_vllm_api.py
 ```
 
-## 🛠 Lessons Learned: Issues & Fixes
+## Issue-to-Solution Map
 
-During the setup on Ubuntu 24.04, we encountered and resolved several critical issues:
+The table below records the actual problems encountered during setup and launch, plus the fix applied in this repo.
 
-### 1. Missing Pre-built Wheels (Ubuntu 24.04 / glibc 2.39)
-- **Issue:** vLLM does not yet have pre-built CPU wheels for the `manylinux_2_39` platform used by Ubuntu 24.04.
-- **Fix:** Switched the installation strategy to **build from source**. This also allows the compiler to optimize specifically for the AVX-512 and VNNI instructions on the Zen 4 architecture.
-
-### 2. CUDA Build Errors on CPU-only System
-- **Issue:** The build process defaulted to looking for `CUDA_HOME` even when targeting CPU.
-- **Fix:** Explicitly set `export VLLM_TARGET_DEVICE=cpu` before running the installation.
-
-### 3. Dependency & Index Conflicts
-- **Issue:** Conflicts between the PyTorch CPU index and PyPI (specifically for `setuptools`) caused "No solution found" errors.
-- **Fix:** Used `uv` with `--index-strategy unsafe-best-match` to allow the resolver to pull compatible versions from multiple trusted indexes.
-
-### 4. Build Isolation & Python Pathing
-- **Issue:** CMake failed to find the Python executable and headers when `uv` used a temporary isolated build environment.
-- **Fix:** Installed `python3-dev` on the system and used the `--no-build-isolation` flag to ensure the build process used the project's local virtual environment.
-
-### 5. Build-time Requirements
-- **Issue:** Since build isolation was disabled, some implicit dependencies like `setuptools_scm` were missing during the metadata generation phase.
-- **Fix:** Added a manual installation step for `setuptools_scm`, `ninja`, and `packaging` into the virtual environment before starting the main build.
-
-### 6. Repository Structure Variations
-- **Issue:** The vLLM repository recently moved its CPU requirements from the root to `requirements/cpu.txt`.
-- **Fix:** Updated `setup.sh` with robust path-checking logic to find the correct requirements file automatically.
-
-### 7. Unrecognized `--device cpu` Flag
-- **Issue:** The `vllm serve` command failed with an "unrecognized arguments: --device cpu" error in the source-built version.
-- **Fix:** Removed the `--device cpu` flag from the command line and instead set the environment variable `export VLLM_TARGET_DEVICE=cpu` to ensure the engine correctly identifies the CPU backend.
+| Issue | Symptom | Fix applied |
+| --- | --- | --- |
+| Source build is slow | `uv` repeatedly prints `Building vllm @ file:///.../vllm` and installation takes a long time | Kept the source-build flow, but documented that this is expected on a small VM because `setup.sh` clones `vllm` and runs `uv pip install . --no-build-isolation` |
+| CPU target not selected during build | Build defaults toward non-CPU paths | `setup.sh` exports `VLLM_TARGET_DEVICE=cpu` before building `vllm` |
+| Python/CMake build isolation issues | Metadata generation or build steps fail to find Python headers or the active environment | `setup.sh` installs `python3-dev` and uses `uv pip install . --no-build-isolation` |
+| Missing build-time packages | Build fails due to packages like `setuptools_scm`, `ninja`, or `packaging` not being available | `setup.sh` installs the required build-time Python packages into `.venv` before building |
+| CPU requirements file moved inside the upstream repo | Installing CPU dependencies fails because the expected file path is absent | `setup.sh` checks multiple candidate paths and picks the available CPU requirements file |
+| `vllm serve` rejects `--device cpu` | Startup fails with `vllm: error: unrecognized arguments: --device cpu` | Removed `--device cpu` from the serve command and relied on `VLLM_TARGET_DEVICE=cpu` instead |
+| `libiomp` missing from `LD_PRELOAD` | Engine startup fails with `RuntimeError: libiomp is not found in LD_PRELOAD` | Updated the launcher to preload `.venv/lib/libiomp5.so` and made `setup.sh` generate the same logic |
+| TCMalloc-only preload was incomplete | CPU startup reached vLLM but failed before model initialization | Launcher now constructs `LD_PRELOAD` from both Intel OpenMP and TCMalloc, keeping TCMalloc optional but `libiomp5.so` required |
+| EPYC-only launcher defaults did not fit the current host | Old script assumed `Qwen2.5-7B-Instruct`, fixed NUMA pinning, and a large KV cache | Rewrote `start_vllm_cpu.sh` for the current VM: `Qwen2.5-1.5B-Instruct`, `OMP_NUM_THREADS=2`, `VLLM_CPU_KVCACHE_SPACE=4`, optional `numactl` |
+| NUMA tooling may be absent or unnecessary | Launch script would fail or over-assume topology on single-node systems | Launcher now checks for `numactl` and only uses it when installed and when more than one NUMA node is present |
 
 ## 📈 Optimizations Applied
-- **TCMalloc:** Used for more efficient memory allocation under high concurrency.
-- **NUMA Pinning:** Bound the process to NUMA node 0 to minimize memory latency on the multi-socket EPYC system.
-- **AVX-512 VNNI:** Enabled via source compilation for significantly faster INT8/BF16 inference.
-- **Port Management:** Added automatic cleanup of port 8000 to the start script to prevent "Address already in use" errors.
+- **Intel OpenMP preload:** Required for x86 CPU startup with current vLLM CPU builds.
+- **TCMalloc preload:** Used when available for better allocator behavior under load.
+- **CPU backend selection:** Enforced with `VLLM_TARGET_DEVICE=cpu`.
+- **Adaptive NUMA behavior:** NUMA binding is only used when the machine topology justifies it.
+- **VM-safe defaults:** Current launcher settings are sized for a smaller remote VM rather than a large bare-metal EPYC server.
