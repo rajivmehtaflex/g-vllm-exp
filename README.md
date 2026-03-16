@@ -24,6 +24,49 @@ Verify the API is working using the OpenAI SDK.
 uv run test_vllm_api.py
 ```
 
+## Optimizations Tips
+
+### Current VM Findings
+- Current default model: `Qwen/Qwen3-1.7B`
+- Current launcher defaults: `OMP_NUM_THREADS=2`, `VLLM_CPU_KVCACHE_SPACE=4`, `MAX_MODEL_LEN=8192`
+- Current CPU exposes `AVX2`, but not `AVX-512` or `VNNI`
+- Qwen3 reasoning is disabled by default with `enable_thinking=false` to avoid `<think>` output in normal chat responses
+
+### What Limits Long Context
+- The repo currently serves with `--max-model-len 8192`, so the active context window is `8192` tokens
+- The downloaded `Qwen3-1.7B` model supports a larger native limit than that, so `20000` is possible as a configuration change
+- On this small CPU VM, longer context mainly increases KV-cache pressure, startup cost, request latency, and reduces safe concurrency
+
+### How to Improve Without New Hardware
+- Increase `MAX_MODEL_LEN` only when needed and keep concurrency low for long-context requests
+- Retain small-thread CPU tuning unless benchmarking proves otherwise; on this VM, more software threads do not create more real CPU power
+- Increase `VLLM_CPU_KVCACHE_SPACE` only if free RAM remains healthy during startup and generation
+- If long context matters more than model quality, prefer a smaller Qwen model over forcing a larger context on tight hardware
+- Use summarization or retrieval so every request does not resend the full conversation history
+
+### What Better Hardware Changes
+- More RAM helps most with longer context and larger KV cache headroom
+- More physical CPU cores help throughput and reduce latency under load
+- `AVX-512` and `VNNI` improve CPU inference speed compared with the current AVX2-only VM
+- A GPU is the main step-change if the goal is both long context and practical performance
+
+### Recommended Next Remote-Machine Checks
+When newer hardware is allocated, use this sequence:
+```bash
+./check_hw.sh
+lscpu
+free -h
+numactl --hardware
+grep -o 'avx512[^ ]*\\|vnni' /proc/cpuinfo | sort -u
+```
+
+Then retune in this order:
+1. Confirm physical cores, NUMA layout, and whether `AVX-512` / `VNNI` are exposed.
+2. Set `OMP_NUM_THREADS` close to physical cores, not logical CPUs.
+3. Re-evaluate `VLLM_CPU_KVCACHE_SPACE` based on free RAM and target concurrency.
+4. Benchmark `8192` versus `20000` context on the new host.
+5. Keep `Qwen/Qwen3-1.7B` as the default baseline, and only move smaller or larger after measuring latency and memory.
+
 ## Issue-to-Solution Map
 
 The table below records the actual problems encountered during setup and launch, plus the fix applied in this repo.
