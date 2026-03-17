@@ -24,6 +24,23 @@ Verify the API is working using the OpenAI SDK.
 uv run test_vllm_api.py
 ```
 
+### 4. Run Concurrent Benchmark (vLLM vs Ollama)
+Starts each server sequentially, benchmarks under concurrent load, stops it, then prints a comparison table and saves `benchmark_results.json`.
+```bash
+uv run benchmark.py
+```
+Both servers **must not** run at the same time — the script manages the full lifecycle automatically (start → benchmark → stop) for each.
+
+**Options:**
+```bash
+uv run benchmark.py --vllm-only    # skip lifecycle; benchmark an already-running vLLM
+uv run benchmark.py --ollama-only  # skip lifecycle; benchmark an already-running Ollama
+```
+
+**Prerequisites for the full run:**
+- Ollama installed and `qwen3:4b` pulled (`ollama pull qwen3:4b`)
+- vLLM set up via `./setup.sh`
+
 ## Optimizations Tips
 
 ### Current VM Findings
