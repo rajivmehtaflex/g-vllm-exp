@@ -1,12 +1,13 @@
 # GEMINI.md - Project Context
 
 ## Project Overview
-`g-vllm-exp` is a CPU-focused experimental wrapper for **vLLM**, optimized for running inference on hardware like AMD EPYC processors as well as smaller remote VMs. It is managed using `uv` and provides scripts for environment setup, server management, and interactive testing. The current default model is `Qwen/Qwen3-1.7B`.
+`g-vllm-exp` is a CPU-focused experimental wrapper for **vLLM**, optimized for running inference on hardware like AMD EPYC processors as well as smaller remote VMs. It is managed using `uv` and provides scripts for environment setup, server management, and interactive testing. The current default model is `Qwen/Qwen3-4B`.
 
 - **Main Technologies:** Python (>= 3.12), `uv`, `vLLM` (CPU backend), `OpenAI SDK`.
 - **Key Files:**
   - `AGENTS.md`: Repository guidelines, structure, and conventions document.
   - `main.py`: Basic entry point script for the project.
+  - `benchmark.py`: Concurrent benchmark script comparing vLLM vs Ollama with full lifecycle management.
   - `setup.sh`: System package installation and vLLM build script.
   - `start_vllm_cpu.sh`: Launches the OpenAI-compatible vLLM server with CPU optimizations (NUMA, TCMalloc, OpenMP).
   - `test_vllm_api.py`: Feature-rich client for interacting with the local server.
@@ -41,10 +42,18 @@ The `test_vllm_api.py` script supports interactive and one-shot modes:
   ```
 - **Key Features:** Streaming output, Time-to-First-Token (TTFT) tracking, token counts, and throughput metrics (tok/s).
 
+### Benchmarking
+Compare vLLM (with local tuning) against Ollama (stock):
+```bash
+uv run benchmark.py
+```
+This script handles the full lifecycle: killing existing processes, starting servers, running concurrent requests at levels [1, 5, 10], and aggregating metrics.
+
 ## Recent Updates
+- **Concurrent Benchmarking:** Added `benchmark.py` for automated vLLM vs Ollama comparison, supporting TTFT, p95 latency, and throughput metrics.
+- **Pre-flight process cleanup:** Added automatic killing of orphaned vLLM and Ollama processes in `benchmark.py` to prevent port conflicts.
+- **Optimization for 8-Core AMD EPYC:** Switched default model to `Qwen/Qwen3-4B` and increased default threads to 8 and KV cache to 16GB for better performance on targeted hardware.
 - **Repository Guidelines:** Added `AGENTS.md` for detailed project structure, testing, and PR conventions.
-- **Default Model Shift:** Switched to `Qwen/Qwen3-1.7B` as the baseline default model, configured to run with reasoning mode disabled by default.
-- **Project Structure:** Added `main.py` entry point.
 - **Interactive CLI:** Added `argparse` and a REPL-style loop to `test_vllm_api.py` for continuous testing.
 - **Streaming & Metrics:** Implemented streaming responses with real-time token display and detailed performance metrics (latency, TTFT, throughput).
 - **CPU Optimization Docs:** Updated `README.md` to document specific issues and fixes for running vLLM on remote CPU-only VMs.
