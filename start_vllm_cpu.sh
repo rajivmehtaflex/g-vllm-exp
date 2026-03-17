@@ -4,13 +4,13 @@ set -euo pipefail
 VENV_PATH=".venv/bin/activate"
 TCMALLOC_LIB="/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4"
 IOMP_LIB=".venv/lib/libiomp5.so"
-MODEL_NAME="Qwen/Qwen3-1.7B"
+MODEL_NAME="Qwen/Qwen3-4B"
 SERVED_MODEL_NAME="qwen-local"
 PORT="8000"
-MAX_MODEL_LEN="8192"
-MIN_AVAILABLE_MEM_GIB="8"
-DEFAULT_THREADS="2"
-DEFAULT_KV_CACHE_GIB="4"
+MAX_MODEL_LEN="32768"
+MIN_AVAILABLE_MEM_GIB="12"
+DEFAULT_THREADS="8"
+DEFAULT_KV_CACHE_GIB="16"
 
 if [[ ! -f "${VENV_PATH}" ]]; then
     echo "Error: ${VENV_PATH} not found. Run ./setup.sh first."
@@ -48,14 +48,16 @@ if [[ -z "${PHYSICAL_CORES}" ]]; then
     PHYSICAL_CORES="${DEFAULT_THREADS}"
 fi
 
-THREAD_COUNT="${DEFAULT_THREADS}"
-if [[ "${PHYSICAL_CORES}" -lt "${THREAD_COUNT}" ]]; then
+if [[ -n "${PHYSICAL_CORES}" && "${PHYSICAL_CORES}" -gt 0 ]]; then
     THREAD_COUNT="${PHYSICAL_CORES}"
+else
+    THREAD_COUNT="${DEFAULT_THREADS}"
 fi
 if [[ "${THREAD_COUNT}" -lt 1 ]]; then
     THREAD_COUNT="1"
 fi
 
+# --- Optimization Flags ---
 PRELOAD_LIBS=("${IOMP_LIB}")
 if [[ -f "${TCMALLOC_LIB}" ]]; then
     PRELOAD_LIBS=("${TCMALLOC_LIB}" "${PRELOAD_LIBS[@]}")
@@ -70,10 +72,11 @@ else
 fi
 
 export OMP_NUM_THREADS="${THREAD_COUNT}"
-export VLLM_CPU_KVCACHE_SPACE="${DEFAULT_KV_CACHE_GIB}"
+export VLLM_CPU_KVCACHE_SPACE=${DEFAULT_KV_CACHE_GIB}
 export VLLM_CPU_OMP_THREADS_BIND=auto
 export VLLM_TARGET_DEVICE=cpu
 
+# --- Launch Server ---
 NUMA_NODES=$(lscpu | awk -F: '/^NUMA node\(s\):/ {gsub(/ /, "", $2); print $2}')
 USE_NUMACTL="false"
 if command -v numactl >/dev/null 2>&1 && [[ -n "${NUMA_NODES}" ]] && [[ "${NUMA_NODES}" -gt 1 ]]; then
