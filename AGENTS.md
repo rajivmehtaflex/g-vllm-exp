@@ -4,10 +4,21 @@
 This repository is a thin wrapper around a local CPU-focused vLLM workflow.
 
 - `setup.sh`: installs system packages, creates `.venv`, and builds `vllm` for CPU use.
+- `check_hw.sh`: quick hardware/CPU capability sanity checks before benchmarking.
 - `start_vllm_cpu.sh`: launches the local OpenAI-compatible server with CPU-safe defaults.
 - `test_vllm_api.py`: interactive client for prompting the local server, with streaming output and token metrics.
+- `benchmark.py`: side-by-side request benchmark script for vLLM vs Ollama.
+- `benchmark_run.log`: generated benchmark output and environment notes (regenerate as needed).
 - `README.md`: setup notes and issue-to-solution mapping for this environment.
 - `vllm/`: upstream vLLM source checkout used by `setup.sh`. Treat it as vendored code unless you are intentionally modifying upstream internals.
+
+## Change Tracking & Codebase Triage
+- Before editing, review the last 4 hours of activity:
+  - `git log --since='4 hours ago' --oneline --decorate`
+- Include a quick working-tree check before and after edits:
+  - `git status --short`
+- For broad edits, confirm touched files with:
+  - `rg --files -g '*.sh' -g '*.py' -g 'README.md' -g 'AGENTS.md'`
 
 ## Build, Test, and Development Commands
 - `./setup.sh`: install dependencies and build the local CPU vLLM environment.
