@@ -52,7 +52,23 @@ RESULTS_FILE = "benchmark_results.json"
 # Server lifecycle — vLLM
 # ---------------------------------------------------------------------------
 
+def _kill_existing_vllm() -> None:
+    """Kill any process bound to port 8000, so our Popen holds the real PID."""
+    result = subprocess.run(
+        ["fuser", "-n", "tcp", "8000"],
+        capture_output=True, text=True
+    )
+    for pid_str in result.stdout.split():
+        try:
+            os.kill(int(pid_str), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    if result.stdout.strip():
+        time.sleep(2)  # brief wait for port to free
+
+
 def start_vllm() -> subprocess.Popen:
+    _kill_existing_vllm()
     print("[vLLM] Starting server via start_vllm_cpu.sh …")
     proc = subprocess.Popen(
         ["bash", "start_vllm_cpu.sh"],
@@ -84,7 +100,20 @@ def stop_vllm(proc: subprocess.Popen) -> None:
 # Server lifecycle — Ollama
 # ---------------------------------------------------------------------------
 
+def _kill_existing_ollama() -> None:
+    """Kill any ollama serve process we don't own, so our Popen holds the real PID."""
+    result = subprocess.run(["pgrep", "-x", "ollama"], capture_output=True, text=True)
+    for pid_str in result.stdout.strip().splitlines():
+        try:
+            os.kill(int(pid_str), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    if result.stdout.strip():
+        time.sleep(2)  # brief wait for port to free
+
+
 def start_ollama() -> subprocess.Popen:
+    _kill_existing_ollama()
     print("[Ollama] Starting ollama serve …")
     serve_proc = subprocess.Popen(
         ["ollama", "serve"],
